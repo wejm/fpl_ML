@@ -7,36 +7,79 @@ library(tidyverse)
 
 setwd("~/fpl/fpl_ML")
 
+#get GW data
 data <- read.csv('https://raw.githubusercontent.com/vaastav/Fantasy-Premier-League/master/data/2019-20/gws/merged_gw.csv')
 
-#xg data is currently just a subset for FWDs only GWs 27-38
+#Get fixtures data
+fixtures <- read.csv('https://raw.githubusercontent.com/vaastav/Fantasy-Premier-League/master/data/2019-20/fixtures.csv')
+
+#Get teams data
+teams <- read.csv('https://raw.githubusercontent.com/vaastav/Fantasy-Premier-League/master/data/2019-20/teams.csv')
+
+#Get player id list
+playerid <- read.csv('https://raw.githubusercontent.com/vaastav/Fantasy-Premier-League/master/data/2019-20/player_idlist.csv')
+
+#xg data -> currently just a subset for FWDs only GWs 27-38
 xgdata <- read.csv('xG_by_gameweek.csv')
 
+#### Data cleaning FPL data ####
 
-#### Data cleaning fpl data ####
+# # Recasting post COVID Gameweeks
+# 
+# for(i in 1:length(data$GW)){
+#   if(data[i,"GW"] >=39){
+#     data[i,"GW"] <- data[i,"GW"]-9}
+# }
 
-# Recasting post COVID Gameweeks
+#Extracting player id
 
-for(i in 1:length(data$GW)){
-  if(data[i,"GW"] >=39){
-    data[i,"GW"] <- data[i,"GW"]-9}
+data$playerid <- as.integer(gsub(".*?([0-9]+).*", "\\1", data$name))
+
+#just want playerid and fpl score by gameweek - the GW score is the target variable
+
+GW_score <- select(data, playerid, GW, was_home, total_points, fixture)
+
+#add fixture info
+fixture_s <- select(fixtures, 'id','team_a','team_h','team_a_difficulty','team_h_difficulty')
+
+#Merge GW data with fixture data
+GW_score <- merge(GW_score,fixture_s, by.x='fixture', by.y='id',all.x = TRUE )
+
+#Identify team
+for(i in 1:length(GW_score$total_points)){
+ if(GW_score[i,'was_home']=='True'){
+   GW_score[i,'team'] <- GW_score[i,'team_h']
+   GW_score[i,'opp_team'] <- GW_score[i,'team_a']
+                              }
+    else{GW_score[i,'team'] <- GW_score[i,'team_a']
+         GW_score[i,'opp_team'] <- GW_score[i,'team_h']
+         }
 }
 
-#Extracting player surname from 'FORENAME_SURNAME_NUMBER' format. Could be more elegant....
+#Fixture difficulty
+for(i in 1:length(GW_score$total_points)){
+  if(GW_score[i,'was_home']=='True'){
+    GW_score[i,'team_diff'] <- GW_score[i,'team_h_difficulty']
+    GW_score[i,'opp_team_diff'] <- GW_score[i,'team_a_difficulty']
+  }
+  else{GW_score[i,'team_diff'] <- GW_score[i,'team_a_difficulty']
+  GW_score[i,'opp_team_diff'] <- GW_score[i,'team_h_difficulty']
+  }
+}
 
-a <- data$name
-data_firstname <- gsub("(_).*", "\\1", a)
-data_surname <- str_remove(data$name,data_firstname)
-a <- data_surname
-data_surname <- gsub("(_).*", "\\1", a)
-data$player <- str_remove(data_surname,'_')
+#### Feature engineering - GW goal data ####
 
-#just want player name and fpl score by gameweek - the GW score is the target variable
+GW_goals <- select(data, 'playerid','GW','goals_scored') %>% 
+            arrange(playerid) %>% 
+            group_by(playerid) %>% 
+            mutate(cum_goals = cumsum(goals_scored))
 
-GW_score <- select(data, player, GW, was_home, total_points)
-?select
+#shifting Gameweek by one - so it's the goals up until and not including that GW
+GW_goals$GW = GW_goals$GW + 1
+GW_goals <- rename(GW_goals, prev_goals = goals_scored )
 
-#### Feature engineering ####
+                   ?rename
+#### Feature engineering - xG data ####
 
 #Generate some features from the xgdata
 
@@ -70,16 +113,18 @@ for(i in 1:length(xgdata$GW)){
 
 #### Join fpl data and XG data ####
 
+#add second name to GW data
 
+joined <- merge(x=GW_score, y=playerid, by.x=("playerid"), by.y="id")
 
+joined <- merge(x=joined, y=xgdata, by.x=c("second_name","GW"), by.y=c("name","GW"))
 
+joined <- merge(x=joined, y=GW_goals, by.x=c("playerid","GW"), by.y=c("playerid","GW"))
 
+?merge
 
-chosen <- c('fixture', 'was_home', 'total_points')
+str(joined)
 
-
-data_c <- subset(data, minutes>80)
-data_c <- data_c[chosen]
 
 substr()
 
