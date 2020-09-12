@@ -117,7 +117,3 @@ write_csv(names,"~/fpl/fpl_ML/names")
 ?write_csv
 
 confusionMatrix(rf.preds,test.data$return, positive='1')
-
-###### Neural Net ########
-
-
