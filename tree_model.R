@@ -6,6 +6,8 @@
 #install.packages('caTools')
 library(caTools)
 library(rpart)
+library(caret)
+#for confusion matrix 
 
 df <- joined
 
@@ -30,7 +32,11 @@ test.data <- subset(df,split == FALSE)
 #TREE Model
 ?rpart
 
-dtree <- rpart(return ~ was_home + xa_avg + xg_avg + prev_xg + team_diff + opp_team_diff + cum_goals + prev_goals, method='class', data=training.data)
+dtree <- rpart(return ~ was_home + xa_avg + xg_avg + prev_xg + team_diff + opp_team_diff + cum_goals + prev_goals + cum_points + ppgw, method='class', data=training.data)
+
+#model with no xG
+
+dtree <- rpart(return ~ was_home + team_diff + opp_team_diff + cum_goals + prev_goals + cum_points + ppgw + selected + transfers_in + transfers_out, method='class', data=training.data)
 
 tree.preds <- predict(dtree,test.data)
 head(tree.preds)
@@ -73,9 +79,45 @@ tree_accuracy <- mean(tree.preds$Correct)
 print(tree_accuracy)
 
 #Create confusion matrix
-table(tree.preds$return_pred, tree.preds$return)
+table(tree.preds$return_pred, test.data$return)
 ?table
 library(rpart.plot)
 prp(dtree)
 
+tree.preds$return_pred <- as.factor(tree.preds$return_pred)
+
+
+
+confusionMatrix(tree.preds$return_pred, test.data$return, positive = '1')
+tree.preds$return
 summary(tree.preds$return)
+
+print(dtree)
+
+########### RANDOM FOREST ##############
+
+library(randomForest)
+
+rf.model <- randomForest(return ~ was_home + team_diff + opp_team_diff + cum_goals + prev_goals + cum_points + ppgw + selected + transfers_in + transfers_out, data = training.data, importance=TRUE)
+print(rf.model)
+
+rf.model$confusion
+
+#Predictions
+rf.preds <- predict(rf.model,test.data)
+
+print(rf.preds)
+table(rf.preds,test.data$return)
+
+#Calculating success rate
+(267+991)/(267+991+200+471)
+
+names <- as.data.frame(names(training.data))
+write_csv(names,"~/fpl/fpl_ML/names")
+?write_csv
+
+confusionMatrix(rf.preds,test.data$return, positive='1')
+
+###### Neural Net ########
+
+

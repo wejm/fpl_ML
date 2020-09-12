@@ -1,4 +1,5 @@
-#Discovery for creating ML predictions using FPL data
+# Discovery for creating ML predictions using FPL data  ---------------------------------------------------------------
+# Also includes feature engineering
 
 library(stringr)
 library(tidyverse)
@@ -6,6 +7,8 @@ library(tidyverse)
 #Second iteration - added sample of xG data
 
 setwd("~/fpl/fpl_ML")
+
+#data hosted on github. Credit : https://github.com/vaastav/Fantasy-Premier-League/
 
 #get GW data
 data <- read.csv('https://raw.githubusercontent.com/vaastav/Fantasy-Premier-League/master/data/2019-20/gws/merged_gw.csv')
@@ -25,19 +28,25 @@ xgdata <- read.csv('xG_by_gameweek.csv')
 #### Data cleaning FPL data ####
 
 # # Recasting post COVID Gameweeks
-# 
-# for(i in 1:length(data$GW)){
-#   if(data[i,"GW"] >=39){
-#     data[i,"GW"] <- data[i,"GW"]-9}
-# }
+ 
+ for(i in 1:length(data$GW)){
+   if(data[i,"GW"] >=39){
+     data[i,"GW"] <- data[i,"GW"]-9}
+ }
+
+for(i in 1:length(fixtures$event)){
+  if(fixtures[i,"event"] >=39){
+    fixtures[i,"event"] <- fixtures[i,"event"]-9}
+}
 
 #Extracting player id
 
 data$playerid <- as.integer(gsub(".*?([0-9]+).*", "\\1", data$name))
 
-#just want playerid and fpl score by gameweek - the GW score is the target variable
+#select variables we want from 'data' for the model - the GW score (total_points) is the target variable
+data <- filter(data, minutes>45 )
 
-GW_score <- select(data, playerid, GW, was_home, total_points, fixture)
+GW_score <- select(data, playerid, GW, was_home, total_points, fixture, value, ict_index, selected, transfers_in, transfers_out)
 
 #add fixture info
 fixture_s <- select(fixtures, 'id','team_a','team_h','team_a_difficulty','team_h_difficulty')
@@ -78,7 +87,30 @@ GW_goals <- select(data, 'playerid','GW','goals_scored') %>%
 GW_goals$GW = GW_goals$GW + 1
 GW_goals <- rename(GW_goals, prev_goals = goals_scored )
 
-                   ?rename
+                  
+
+#### Feature engineering - points so far ####
+
+cum_points <- select(GW_score, 'playerid','GW','total_points')
+cum_points <- arrange(cum_points,playerid,GW)
+
+#cumulative points
+for(i in unique(cum_points$playerid)){
+  tp <- cum_points$total_points[cum_points$playerid==i]
+  cum_points$cum_points[cum_points$playerid==i] <- cumsum(tp)
+}
+
+#points per gameweek
+cum_points$ppgw <- cum_points$cum_points/cum_points$GW
+
+#shifting Gameweek by one - so it's the score up until and not including that GW
+cum_points$GW = cum_points$GW + 1
+
+#drop total_points variable for tidyness 
+cum_points <- select(cum_points, -total_points)
+
+
+
 #### Feature engineering - xG data ####
 
 #Generate some features from the xgdata
@@ -117,11 +149,13 @@ for(i in 1:length(xgdata$GW)){
 
 joined <- merge(x=GW_score, y=playerid, by.x=("playerid"), by.y="id")
 
-joined <- merge(x=joined, y=xgdata, by.x=c("second_name","GW"), by.y=c("name","GW"))
+#partial xG data
+#joined <- merge(x=joined, y=xgdata, by.x=c("second_name","GW"), by.y=c("name","GW"))
 
 joined <- merge(x=joined, y=GW_goals, by.x=c("playerid","GW"), by.y=c("playerid","GW"))
 
-?merge
+joined <- merge(x=joined, y=cum_points, by.x=c("playerid","GW"), by.y=c("playerid","GW"))
+
 
 str(joined)
 
